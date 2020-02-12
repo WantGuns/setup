@@ -1,6 +1,8 @@
 #!/bin/bash
 
-DEVICE=angler
+# lavender has fstab.qcom instead of fstab.lavender, so keeping this
+# variable qcom.
+DEVICE=qcom
 
 tools=(
 abootimg
@@ -21,7 +23,9 @@ check_perm() {
 }
 show_warning() {
     delay=10
-    warn "This script is for device $DEVICE.  Using this script"
+    # changing the script a bit just so that variables are not incorrectly used. 
+    # s/device $DEVICE/lavender/
+    warn "This script is for lavender.  Using this script"
     warn "on other devices may fail or cause damage to your device."
     warn "This script will wipe all user data on your device."
     warn "Make sure you backup important data on the device before"
@@ -70,7 +74,7 @@ info "Unpacked initramfs"
 # ============================================================
 # Device-specific logic -- change forcefdeorfbe to encryptable
 # ============================================================
-sed -i -e 's/forcefdeorfbe/encryptable/g' rootfs/fstab.$DEVICE || die "Failed to modify fstab.$DEVICE to disable encryption"
+sed -i -e 's/forceencrypt/encryptable/g' rootfs/fstab.$DEVICE || die "Failed to modify fstab.$DEVICE to disable encryption"
 info "Modified fstab.$DEVICE to disable encryption"
 # ============================================================
 # End of device-specific logic
