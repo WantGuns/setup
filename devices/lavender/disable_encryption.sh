@@ -72,7 +72,7 @@ cat initrd.img | gunzip | cpio -vidD rootfs || die "Failed to unpack initrd"
 info "Unpacked initramfs"
 
 # ============================================================
-# Device-specific logic -- change forcefdeorfbe to encryptable
+# Device-specific logic -- change forceencrypt to encryptable
 # ============================================================
 sed -i -e 's/forceencrypt/encryptable/g' rootfs/fstab.$DEVICE || die "Failed to modify fstab.$DEVICE to disable encryption"
 info "Modified fstab.$DEVICE to disable encryption"
