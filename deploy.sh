@@ -4,12 +4,15 @@ CONTAINER_NAME=android
 LXC_ROOT=/var/lib/lxc/$CONTAINER_NAME
 ROOTFS=$LXC_ROOT/rootfs
 DEVICE="$@"
+
+# TODO: s/custom/current/
+BOOTORDR=$(sed -E -n 's/.*sharkbait.boot=(\S*).*/\1/p' /usr/lib/preinit/custom/bootimg.cfg)
+
 FILES=(
 pre-start.sh
 post-stop.sh
 config
 )
-
 tools=(
 abootimg
 awk
@@ -67,32 +70,66 @@ for a in ${FILES[@]}; do
 done
 info "Copied LXC files to $LXC_ROOT"
 
-bootblk=/dev/block/bootdevice/by-name/boot
-bootimg=$tmpdir/boot.img
-ramdisk=$tmpdir/initrd.img
-if [ ! -b $bootblk ]; then
-    warn "/dev not in Android's structure, trying to detect via blkid"
-    # need sudo to read raw block devices
-    bootblk=$(blkid | sed -n -E -e 's|^(/dev/.*): PARTLABEL="boot".*$|\1|p')
-    [ -b "$bootblk" ] || die "Failed to detect boot block location"
-fi
-dd if=$bootblk of=$bootimg || die "Failed to read current boot.img from $bootblk to $bootimg"
-info "Read boot.img"
+if [ -z $BOOTORDR ] || [ $BOOTORDR = 'ramdisk']; then
 
-cd $tmpdir
-abootimg -x $bootimg || die "Failed to unpack boot.img"
-rm -rf "$ROOTFS"/* || die "Failed to empty current $ROOTFS"
-cat $ramdisk | gunzip | cpio -vidD "$ROOTFS" || die "Failed to unpack initrd into $ROOTFS"
-info "Unpacked initrd into $ROOTFS"
+    # Ramdisk boot - Follow original setup
+
+    bootblk=/dev/block/bootdevice/by-name/boot
+    bootimg=$tmpdir/boot.img
+    ramdisk=$tmpdir/initrd.img
+    if [ ! -b $bootblk ]; then
+        warn "/dev not in Android's structure, trying to detect via blkid"
+        # need sudo to read raw block devices
+        bootblk=$(blkid | sed -n -E -e 's|^(/dev/.*): PARTLABEL="boot".*$|\1|p')
+        [ -b "$bootblk" ] || die "Failed to detect boot block location"
+    fi
+    dd if=$bootblk of=$bootimg || die "Failed to read current boot.img from $bootblk to $bootimg"
+    info "Read boot.img"
+
+    cd $tmpdir
+    abootimg -x $bootimg || die "Failed to unpack boot.img"
+    rm -rf "$ROOTFS"/* || die "Failed to empty current $ROOTFS"
+    cat $ramdisk | gunzip | cpio -vidD "$ROOTFS" || die "Failed to unpack initrd into $ROOTFS"
+    info "Unpacked initrd into $ROOTFS"
+
+    mv $ROOTFS/sbin/charger{,.real} || die "Failed to install charger wrapper"
+    cp "$dir"/scripts/charger $ROOTFS/sbin/charger || die "Failed to install charger wrapper"
+    chmod 750 $ROOTFS/sbin/charger || die "Failed to set permissions for charger wrapper"
+    info "Installed charger wrapper"
+else 
+
+    # SAR Boot - Follow SAR workflow
+    # TODO: test and provide workflows for more SAR types.
+
+    info "The device is System-As-Root"
+    which bootstrap-init >/dev/null 2>&1 || die "Required tool `bootstrap-init` not found in PATH"
+
+    cp $(which bootstrap-init) $LXC_ROOT/artifacts/init
+
+    sar_patches=$dir/patches/$BOOTORDR
+    cd $LXC_ROOT
+    patch -p0 < <(cat "$sar_patches"/*) || die "Failed to patch helper scripts"
+    
+    # ROOTFS is the Android's /system partition now
+    # TODO: mount /system somewhere temporary like /mnt
+    systemblk=/dev/block/bootdevice/by-name/system
+    if [ ! -b $systemblk ]; then
+        warn "/dev not in Android's structure, trying to detect via blkid"
+        # need sudo to read raw block devices
+        systemblk=$(blkid | sed -n -E -e 's|^(/dev/.*): PARTLABEL="system".*$|\1|p')
+        [ -b "$systemblk" ] || die "Failed to detect system block location"
+    fi
+    mkdir -p /mnt/system
+    mount /dev/block/by-name/system /mnt/system || die "Failed to mount /system"
+    ROOTFS=/mnt/system
+fi
 
 cd $ROOTFS
 patch -p0 < <(cat "$patches"/*) || die "Failed to apply patch to $ROOTFS"
 info "Applied patches to $ROOTFS"
 
-mv $ROOTFS/sbin/charger{,.real} || die "Failed to install charger wrapper"
-cp "$dir"/scripts/charger $ROOTFS/sbin/charger || die "Failed to install charger wrapper"
-chmod 750 $ROOTFS/sbin/charger || die "Failed to set permissions for charger wrapper"
-info "Installed charger wrapper"
+# Unmount rootfs if SAR
+umount -l /mnt/system >/dev/null 2>&1 || true
 
 cat "$devdir"/fstab.android > /etc/fstab || die "Failed to write Android fstab"
 info "Wrote Android fstab to system fstab"

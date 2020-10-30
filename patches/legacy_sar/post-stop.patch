@@ -1,0 +1,12 @@
+--- post-stop.sh	2020-08-28 16:41:23.136378143 +0530
++++ post-stop-sar.sh	2020-10-29 05:07:41.414000000 +0530
+@@ -6,6 +6,9 @@
+ 	exit 0
+ fi
+ 
++# clean rootfs for SAR-enabled devices.
++rm -rf /var/lib/lxc/android/rootfs/*
++
+ # leave mark to prevent container restart
+ touch /run/.android-shutdown
+ 

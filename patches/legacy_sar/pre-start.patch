@@ -1,0 +1,18 @@
+--- pre-start.sh	2020-08-28 16:41:23.136378143 +0530
++++ pre-start-sar.sh	2020-10-29 05:03:02.320146587 +0530
+@@ -1,5 +1,8 @@
+ #!/bin/sh
+ 
++cp /var/lib/lxc/android/artifacts/init /var/lib/lxc/android/rootfs/init
++mkdir -p /var/lib/lxc/android/rootfs/dev
++
+ mkdir -p /run
+ if [ -f /run/.android-shutdown ]; then
+ 	# we're shutting down; don't respawn
+@@ -9,4 +12,4 @@
+ 
+ # handle cgroup
+ mkdir /sys/fs/cgroup/cpu/lxc
+-echo 950000 > /sys/fs/cgroup/cpu/lxc/cpu.rt_runtime_us
++echo 950000 > /sys/fs/cgroup/cpu/lxc/cpu.rt_runtime_us
+\ No newline at end of file
